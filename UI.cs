@@ -58,7 +58,7 @@ public class UI
 			}
 			if (player.GetComponent<StatusManager>().Plugins[2].ability_C == PluginData.C_Ability.jkr) // JKR
 				Application.Quit();
-
+asdasdasdasd
 			MatchManager.ins.LoadMatchData_Inner(52); // 51 is the last vanilla GP.
 			MatchManager.ins.StartMatch();
 			__instance.Main_Hide();
