@@ -270,9 +270,6 @@ public class Main
 	{
 		if (GameVariable.Match_Key != "GP_10_4") return;
 
-		// setMusic = true;
-		// PlayMusic();
-
 		isLoadingModRace = false;
 		UI.deadBosses = new bool[filenames.Length];
 		UI.spawnDelaysProcessed = new bool[filenames.Length];
@@ -495,45 +492,3 @@ public class Main
 			__instance.RigorTime = 2f;
 	}
 }
-
-// public static class Unity6AssetBundleLoader
-// {
-// 	// Define the exact C++ unmanaged delegate signature used by Unity 6
-// 	// pathPtr = IntPtr to the Native Il2CppString
-// 	private delegate IntPtr d_LoadFromFile_Internal(IntPtr pathPtr, uint crc, ulong offset);
-// 	private static d_LoadFromFile_Internal _rawLoadFromFileInternal;
-
-// 	static Unity6AssetBundleLoader()
-// 	{
-// 		// Resolve the internal C++ function directly from the Unity Engine binaries
-// 		IntPtr icallPtr = IL2CPP.il2cpp_resolve_icall("UnityEngine.AssetBundle::LoadFromFile_Internal(System.String,System.UInt32,System.UInt64)");
-
-// 		if (icallPtr != IntPtr.Zero)
-// 		{
-// 			_rawLoadFromFileInternal = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<d_LoadFromFile_Internal>(icallPtr);
-// 		}
-// 	}
-
-// 	public static AssetBundle LoadBundle(string bundlePath)
-// 	{
-// 		if (_rawLoadFromFileInternal == null)
-// 		{
-// 			Plugin.Log.LogError("Failed to resolve raw AssetBundle icall pointer!");
-// 			return null;
-// 		}
-
-// 		// Convert the managed C# string into an unmanaged native IL2CPP string pointer object
-// 		IntPtr nativeStringPtr = IL2CPP.ManagedStringToIl2Cpp(bundlePath);
-
-// 		// Invoke the unmanaged C++ function directly, skipping the broken C# interop wrappers
-// 		IntPtr nativeBundleResult = _rawLoadFromFileInternal(nativeStringPtr, 0, 0);
-
-// 		if (nativeBundleResult == IntPtr.Zero)
-// 		{
-// 			return null;
-// 		}
-
-// 		// Cast the raw object pointer back to a managed AssetBundle proxy class
-// 		return new AssetBundle(nativeBundleResult);
-// 	}
-// }

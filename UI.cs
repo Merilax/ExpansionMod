@@ -53,6 +53,8 @@ public class UI
 			{
 				if (f._BulletType_Add == (BulletManager.BulletType_Add)7) // Overkill
 					Application.Quit();
+				if (f._BulletType != (BulletManager.BulletType)7 )//f._BulletType_Add != (BulletManager.BulletType_Add)6) 
+					Application.Quit();
 			}
 			if (player.GetComponent<StatusManager>().Plugins[2].ability_C == PluginData.C_Ability.jkr) // JKR
 				Application.Quit();
