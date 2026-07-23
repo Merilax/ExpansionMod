@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <AssemblyName>BossMod</AssemblyName>
-    <Product>Bossfight Mod</Product>
+    <AssemblyName>ExpansionMod</AssemblyName>
+    <Product>Expansion Mod</Product>
     <Version>0.0.1</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
@@ -12,7 +12,7 @@
       https://nuget.bepinex.dev/v3/index.json;
       https://nuget.samboy.dev/v3/index.json
     </RestoreAdditionalProjectSources>
-    <RootNamespace>BossMod</RootNamespace>
+    <RootNamespace>ExpansionMod</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

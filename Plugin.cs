@@ -1,18 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
-using DG.Tweening;
 using HarmonyLib;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
-namespace BossMod;
+namespace ExpansionMod;
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
 [BepInProcess("BREAK ARTS III.exe")]
@@ -21,9 +19,17 @@ public class Plugin : BasePlugin
 {
 	internal static new ManualLogSource Log;
 	public static ConfigFile config;
+	public static UniverseLib.AssetBundle assets;
 	public override void Load()
 	{
-		Log = BepInEx.Logging.Logger.CreateLogSource("BossMod");
+		Log = BepInEx.Logging.Logger.CreateLogSource("ExpansionMod");
+
+		string bundlePath = Path.Combine(Paths.PluginPath, "ExpansionMod", "modelassets");
+		if (!File.Exists(bundlePath))
+			throw new System.Exception($"Bundle not found at: {bundlePath}");
+
+		assets = UniverseLib.AssetBundle.LoadFromFile(bundlePath) ?? throw new System.Exception("Failed to load assets!");
+
 		var harmony = Harmony.CreateAndPatchAll(typeof(Main));
 		harmony.PatchAll(typeof(UI));
 	}
@@ -32,463 +38,185 @@ public class Plugin : BasePlugin
 
 public class Main
 {
-	public static bool isLoadingModRace = false;
-	public static bool isInModRace = false;
-	public static bool isMatchInProgress = false;
 	public static bool init = false;
 
-	// DATA
-	public static string[] filenames = ["Immortal", "Castigator"]; // FILE NAMES MUST BE EXACT, THIS DICTATES WHICH BOSSES WILL LOAD [!!!]
-	public static string[] bossnames = new string[5]; // Automatic utility.
+	public static Dictionary<string, ModuleDataDef> moduleDefs = [];
+	public static List<List<ModuleList>> moduleLists = [
+		[], // Armor
+		[], // Heat
+		[], // Gene
+		[], // Detec
+		[], // Thr
+		[], // Ctrl
+		[], // Sp
+		[], // Wep
+		[], // Joint
+		[], // Orna
+	];
 
-	// This is where the AI behaviour is set up.
-	public static Dictionary<string, Dictionary<string, dynamic>> bossStats = new()
+	// INIT
+	[HarmonyPostfix]
+	[HarmonyPatch(typeof(Scene_GameInit), nameof(Scene_GameInit.Start))]
+	public static void GameInitStart(Scene_MainMenu __instance)
 	{
-		{ // Immortal
-			filenames[0], new(){
-				{"health", 1_250_000},
-				{"shield", 10_000},
-				{"weight", 8000},
-				{"generation", 10_000_000},
-				{"maxEnergy", 10_000_000},
-				{"cooling", 10_000_000},
-				{"maxHeat", 10_000_000},
-				{"lockSpeed", 5000},
-				{"lockRange", 3000},
-				{"driveSpeed", .65f}, // 0-0.99, 1 bugs out sometimes.
-				{"groundOffset", 0},
-				{"killBonus", .15f}, // Starts from 0, translates to +X %
-				{"delayedSpawn", false},
-				{"delayedSpawnTime", 0},
-				{"AI", new d_Enemy(){
-					// Don't really know what the _Acts do.
-					_ActA = d_Enemy.SpAct.randomLong,
-					_ActB = d_Enemy.SpAct.randomLong,
-					_ActC = d_Enemy.SpAct.none,
-					_ActAType = d_Enemy.SpType.Continuous,
-					_ActBType = d_Enemy.SpType.Continuous,
-					_ActCType = d_Enemy.SpType.Continuous,
-					_ActA_BtOr = d_Enemy.SpAct.none,
-					_ActB_BtOr = d_Enemy.SpAct.none,
-					_ActC_BtOr = d_Enemy.SpAct.none,
-					_ActA_BtOr_Inv = false,
-					_ActB_BtOr_Inv = false,
-					_ActC_BtOr_Inv = false,
-					_ActA_Inv = false,
-					_ActB_Inv = false,
-					_ActC_Inv = false,
-
-					_Level = 10,
-					_Type = d_Enemy.EnemyType.Battle,
-					_AbleOnWater = true, // Dunno. Probably avoid / ignore water.
-					_Aerial = 0f, // 0-1 Prioritize jumping
-					_Aggressive = .8f, // 0-1 Prioritize combat
-					_Accuracy = .5f, // 0-1 Fire whenever / prioritize accurate shots.
-					_Tracking = .1f, // 0-1 Objective awareness, or patience. Lower = Stubborn. Doesn't seem to do much in Combat mode.
-					_Elusion = .7f, // 0-1 Prioritize beelining / dodging and circling movement.
-					_Brave = .1f, // 0-1 Prioritize survival.
-					_ThrustPriority = .6f, // 0.5-1.5 Detonator to Thruster usage ratio.
-					_WallDodgePriority = .1f, // 0-2 Obstacle dodging priority (race).
-					_InFight = .1f, // 0-1 Melee chance. Don't think it does anything if they can't kick or burst.
-					_TargetRange = 100, // Optimal disance from target during combat, in metres.
-					_Random = .1f, // 0-0.5 Messes around with the AI brain. Most AIs seem to be set to .1
-					_SeparateType = d_Enemy.SeparateType.Random, // Presumably either Separator, or more likely, Diffractor usage.
-					_NoLockTarget = true, // true avoids AIs from killing eachother (but they still lock, which I fixed elsewhere).
-					_OnlyLockPlayer = false, // Bugged, do not change.
-					_FollowTarget = "", // This makes AIs follow another. See "Empress" and her "Pawn"s.
-				}},
-			}
-		},
-		{ // Castigator
-			filenames[1], new(){
-				{"health", 650_000},
-				{"shield", 10_000},
-				{"weight", 8000},
-				{"generation", 10_000_000},
-				{"maxEnergy", 10_000_000},
-				{"cooling", 10_000_000},
-				{"maxHeat", 10_000_000},
-				{"lockSpeed", 5000},
-				{"lockRange", 3000},
-				{"driveSpeed", .65f},
-				{"groundOffset", 70},
-				{"killBonus", .10f},
-				{"delayedSpawn", true},
-				{"delayedSpawnTime", 50},
-				{"AI", new d_Enemy(){
-					_ActA = d_Enemy.SpAct.none,
-					_ActB = d_Enemy.SpAct.randomLong,
-					_ActC = d_Enemy.SpAct.none,
-					_ActAType = d_Enemy.SpType.Continuous,
-					_ActBType = d_Enemy.SpType.Continuous,
-					_ActCType = d_Enemy.SpType.Continuous,
-					_ActA_BtOr = d_Enemy.SpAct.none,
-					_ActB_BtOr = d_Enemy.SpAct.none,
-					_ActC_BtOr = d_Enemy.SpAct.none,
-					_ActA_BtOr_Inv = false,
-					_ActB_BtOr_Inv = false,
-					_ActC_BtOr_Inv = false,
-					_ActA_Inv = false,
-					_ActB_Inv = false,
-					_ActC_Inv = false,
-
-					_Level = 10,
-					_Type = d_Enemy.EnemyType.Battle,
-					_AbleOnWater = true,
-					_Aerial = 0f, // Prioritize hopping
-					_Aggressive = .6f, // 0-1 Prioritize combat
-					_Accuracy = .8f, // 0-1 Prioritize firing if accurate
-					_Tracking = .1f, // 0-1 Objective awareness, or patience. Lower = Stubborn
-					_Elusion = .7f, // 0-1 Increased dodgy movement
-					_Brave = .1f, // 0-1 Prioritize survival
-					_ThrustPriority = .8f, // 0.5-1.5 Thruster usage
-					_WallDodgePriority = .1f, // 0-2 Dodging (race)
-					_InFight = .1f, // 0-1 Melee chance
-					_TargetRange = 200, // Optimal disance from target during combat, in metres
-					_Random = .1f, // 0-0.5
-					_SeparateType = d_Enemy.SeparateType.Random,
-					_NoLockTarget = true,
-					_OnlyLockPlayer = false,
-					_FollowTarget = "",
-				}},
-			}
-		},
-	};
-
-	// This is the custom GP config.
-	public static GrandprixDef AddModdedGP()
-	{
-		GrandprixDef gpdef = new()
+		moduleDefs.Add("ExpansionMod_0001", new()
 		{
-			_Difficulty = 10, // Difficulty GP <10>-4
-			_ID = 4, // Level number GP 10-<4>
-			_Name = "BOSSFIGHT EVENT", // Match name
-			_EnemyCodes = filenames,
-			_EnemyLevels = new([10, 10]), // Always match the amount of entries.
-			_EnemyLevels_Hard = new([10, 10]), // And copy everything from normal mode to hard mode.
-			_Stages = new([new CustomMatchData.MatchData(){ // Copy this to _Stages_Hard too.
-				_Energy = VenueData.Energy.High,
-				_Grav = VenueData.Grav.Mid,
-				_IsSet = true,
-				_Land = VenueData.Landscape.Cyber,
-				_Layout = VenueData.VenueLayout.None,
-				_Place = SinglePlayData.MatchPlace.Cyber_Battle,
-				_Temp = VenueData.Temperature.None,
-				_Time = VenueData.Time.Night,
-				_Rules = new CustomMatchData.d_Rules() {
-					_Drone = CustomMatchData.EnemyDroneType.None,
-					_MaxLap = 1,
-					_Rebuild = CustomMatchData.EnableRebuildingType.Enable,
-					_Type = (GameVariable.MatchType)3,
-					_SpecialRule = CustomMatchData.SpecialRuleType.None
-				},
-			}]),
-			_Stages_Hard = new([new CustomMatchData.MatchData(){
-				_Energy = VenueData.Energy.High,
-				_Grav = VenueData.Grav.Mid,
-				_IsSet = true,
-				_Land = VenueData.Landscape.Cyber,
-				_Layout = VenueData.VenueLayout.None,
-				_Place = SinglePlayData.MatchPlace.Cyber_Battle,
-				_Temp = VenueData.Temperature.None,
-				_Time = VenueData.Time.Night,
-				_Rules = new CustomMatchData.d_Rules() {
-					_Drone = CustomMatchData.EnemyDroneType.None,
-					_MaxLap = 1,
-					_Rebuild = CustomMatchData.EnableRebuildingType.Enable,
-					_Type = (GameVariable.MatchType)3,
-					_SpecialRule = CustomMatchData.SpecialRuleType.None
-				},
-			}]),
-			_PrizeMultiplier = 4, // Doesn't do anything?
-			_ScoreAttackTargets = new([]),
-			_ForceMachineKey = "", // Forces you into a specific preset mech.
-			_TutorialDialogType = GrandprixDef.TutorialDialogType.None,
-		};
+			name = "ExpansionMod_0001",
+			_Name = "H_99 Name",
+			_Structure = 2,
+			_DescriptionId = 8,
+			_DescriptionKey = TranslationList.Keys.module_detail,
+			_DescriptionPrefix = "e_",
+			// _Preview = null
+		});
+		moduleLists[9].Add(new()
+		{
+			_MdName = "ExpansionMod_0001",
+			_name = "Heat_99",
+		});
 
-		return gpdef;
+
+		for (int i = 0; i < AllItemList.AllModuleList.Count; i++)
+		{
+			if (moduleLists[i].Count == 0) continue;
+
+			int oldLength = AllItemList.AllModuleList[i].Count;
+			int newLength = oldLength + moduleLists[i].Count;
+			var newArr = new Il2CppReferenceArray<ModuleList>(newLength);
+
+			for (int j = 0; j < newLength; j++)
+			{
+				if (j < oldLength)
+					newArr[j] = AllItemList.AllModuleList[i][j];
+				else
+					newArr[j] = moduleLists[i][j - oldLength];
+			}
+			AllItemList.AllModuleList[i] = newArr;
+		}
 	}
 
-
-	// MAIN
-	// Initializer
 	[HarmonyPostfix]
-	[HarmonyPatch(typeof(Scene_MainMenu), nameof(Scene_MainMenu.Start))]
-	public static void MainStart(Scene_MainMenu __instance)
+	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.Update))]
+	public static void MachineDesignerMainUpdate(MachineDesignerMain __instance)
 	{
-		if (!init)
+		if (Keyboard.current.jKey.wasPressedThisFrame)
 		{
-			string bundlePath = Path.Combine(Paths.PluginPath, "BossMod", "music");
-			if (!File.Exists(bundlePath))
-			{
-				Plugin.Log.LogError($"Bundle not found at: {bundlePath}");
-			}
+			var sampleMesh = __instance._MM.transform.GetChild(1).GetChild(0).GetChild(0).GetComponent<SkinnedMeshRenderer>();
+
+			GameObject module = ModLoadModule("ExpansionMod_0001", sampleMesh.material.shader);
+
+			// Vanilla-like processing
+			__instance.Install_ControlModule = module;
+			__instance.SetInstallPhase(MachineDesignerMain.Install_ControlPhase.Grab);
+			__instance.Install_ActivateAllMarkers(ModuleData.ModuleType.Normal);
+			module.GetComponent<ModuleData>().Init();
+			module.GetComponent<ModuleEffects>().SetBasicData(__instance._BM, __instance._MM);
+			module.GetComponent<ModuleEffects>().InitSelectedEffets();
+			__instance.Install_SetAllThrusterDirSign(true, null);
+		}
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.ModuleLoader))]
+	public static void ModuleLoader(MachineDesignerMain __instance, string path)
+	{
+		// Plugin.LogInfo(path);
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(DataManager), nameof(DataManager.GetUnlockStatus))]
+	public static void GetUnlockStatus(ref string key, ref bool __runOriginal, ref DataManager.UnlockStatus __result)
+	{
+		Plugin.LogInfo("GetUnlockStatus: " + key);
+		if (key.Contains("ExpansionMod"))
+		{
+			Plugin.LogInfo("Custom plugin unlocked");	
+			__runOriginal = false;
+			__result = DataManager.UnlockStatus.unlocked;
+		}
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(Pooler), nameof(Pooler.InstantiateModuleSync))]
+	public static void InstantiateModuleSync(ref string name, ref bool __runOriginal, ref GameObject __result)
+	{
+		// Plugin.LogInfo("InstantiateModuleSync: " + name);
+		if (name.Contains("ExpansionMod"))
+		{
+			__runOriginal = false;
+			__result = ModLoadModule(name.Substring(7));
+		}
+	}
+
+	[HarmonyPostfix]
+	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.GetUnlockedList))]
+	public static void GetUnlockedList(int type, int cat, ref Il2CppReferenceArray<ModuleList> __result)
+	{
+		Plugin.LogInfo("GetUnlockedList: " + type + " " + cat);
+		foreach (var item in __result)
+		{
+			Plugin.LogInfo(item._name);
+		}
+	}
+
+	// [HarmonyPrefix]
+	// [HarmonyPatch(typeof(MachineDesignerMain._ModuleLoader_d__86), nameof(MachineDesignerMain._ModuleLoader_d__86.MoveNext))]
+	// public static void ModuleLoader(MachineDesignerMain._ModuleLoader_d__86 __instance)
+	// {
+	// 	var ins = __instance.__4__this;
+	// 	Plugin.LogInfo("Loader: " + __instance.path);
+	// }
+
+	[HarmonyPostfix]
+	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.InitSumbnails))]
+	public static void ExtendDesignerThumbnailButtons(MachineDesignerUI __instance)
+	{
+		int totalModuleCount = 0;
+		foreach (var item in moduleLists) totalModuleCount += item.Count;
+
+		Button sampleBtn = __instance.AllSumbnails[0];
+
+		var newArr = new Il2CppReferenceArray<Button>(__instance.AllSumbnails.Count + totalModuleCount);
+
+		for (int i = 0; i < __instance.AllSumbnails.Count + totalModuleCount; i++)
+		{
+			if (i < __instance.AllSumbnails.Count)
+				newArr[i] = __instance.AllSumbnails[i];
 			else
 			{
-				UniverseLib.AssetBundle bundle = UniverseLib.AssetBundle.LoadFromFile(bundlePath);
-				if (bundle != null)
-				{
-					var clip = bundle.LoadAsset<AudioClip>("OracleBossMusic.ogg");
-					clip.LoadAudioData();
-					AuMa.ins.Data_BGM[11] = clip;
-				}
-				else
-				{
-					Plugin.Log.LogError("Failed to load assets!");
-				}
-			}
-
-			List<GrandprixDef> gpDatas = MatchManager.ins._GrandprixData.grandprixDatas.ToList();
-			gpDatas.Add(AddModdedGP());
-			MatchManager.ins._GrandprixData.grandprixDatas = new Il2CppReferenceArray<GrandprixDef>(gpDatas.ToArray());
-
-			foreach (string key in filenames)
-			{
-				EnemyData.AllEnemyData.Add(key, bossStats[key]["AI"]);
-			}
-
-			init = true;
-		}
-	}
-
-	public static bool setMusic = false;
-	[HarmonyPrefix]
-	[HarmonyPatch(typeof(AuMa), nameof(AuMa.PlayBGM), [typeof(AuMa.BGMType), typeof(bool)])]
-	public static void PlayMusic(ref bool __runOriginal)
-	{
-		if (!setMusic) return;
-		setMusic = false;
-		__runOriginal = false;
-		AuMa.ins.PlayBGM(11, AuMa.PlayMode.LongFade, true);
-	}
-
-	// STAGE INFO
-	// Setup the custom arena.
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(StageInfo), nameof(StageInfo.SetupStage))]
-	public static void SetupStage()
-	{
-		if (GameVariable.Match_Key != "GP_10_4") return;
-
-		isLoadingModRace = false;
-		UI.deadBosses = new bool[filenames.Length];
-		UI.spawnDelaysProcessed = new bool[filenames.Length];
-
-		for (int i = 0; i < filenames.Length; i++)
-		{
-			bossnames[i] = AllPlayerData.ins.Players[i + 1].Relay.GetComponent<StatusManager>().MachineName;
-		}
-
-		isInModRace = true;
-		UI.ResetUI();
-
-		if (SceneManager.GetActiveScene().name != "Cyber_01") return;
-
-		// Custom arena.
-		GameObject[] roots = SceneManager.GetSceneByName("Cyber_01").GetRootGameObjects();
-		roots.First(e => e.name == "Tower").transform.position = new(1024, -519.4f, 1024);
-
-		roots.First(e => e.name == "Ground").GetComponent<MeshRenderer>().material.color = Color.black;
-
-		var orna = roots.First(e => e.name == "Circuits").transform.Find("Orna");
-		for (int i = 0; i < 4; i++)
-		{
-			orna.GetChild(i).GetChild(0).GetComponent<MeshRenderer>().material.color = Color.black;
-			orna.GetChild(i).DOLocalRotate(new(0, 360, 0), UnityEngine.Random.Range(50, 110), RotateMode.LocalAxisAdd).SetLoops(-1, LoopType.Restart).SetEase(Ease.Linear).Play();
-		}
-
-		Transform cubes = roots.First(e => e.name == "Cubes").transform;
-		cubes.GetChild(0).position = new(1162, 25, 510);
-		cubes.GetChild(1).position = new(1230, 25, 710);
-		cubes.GetChild(2).position = new(1132, 25, 1610);
-		cubes.GetChild(3).position = new(830, 25, 1330);
-		cubes.GetChild(4).position = new(810, 25, 980);
-		cubes.GetChild(5).position = new(880, 25, 1550);
-		cubes.GetChild(6).position = new(1230, 25, 1260);
-		cubes.GetChild(7).position = new(900, 25, 650);
-		float[] deterministic_durations = [9, 12, 8, 11, 7, 8, 12, 10, 11, 12, 9, 10];
-		float[] deterministic_delays = [4, 3.5f, 3, 4, 3, 4.5f, 3.5f, 3.5f, 4.5f, 4, 4, 3.5f];
-		for (int i = 0; i < cubes.childCount; i++)
-		{
-			var cube = cubes.GetChild(i).DOMoveY(-25f, deterministic_durations[i]).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetDelay(deterministic_delays[i]).SetUpdate(false).Play();
-		}
-
-		Light spot = roots.First(e => e.name == "Lightings").transform.GetChild(0).GetComponent<Light>();
-		Light sun = roots.First(e => e.name == "Lightings").transform.GetChild(1).GetComponent<Light>();
-		Color sunColor = new(.6f, .2f, .3f);
-		Color sunBrightColor = new(1f, .9f, .9f);
-		Color spotColor = new(.45f, .45f, .45f);
-		Color spotBrightColor = new(1, 1, 1);
-		sun.color = sunColor;
-		spot.color = spotColor;
-
-		float[] light_delays = [8, .12f, .05f, 1.5f, 7, .04f, .1f, 10, .4f, .06f, .3f, 8, .4f, .14f, .2f, 5, .06f, .1f, 8, .02f, .14f, .2f, 10, .08f, .1f, .4f, 7, .03f, .3f, .1f];
-
-		Sequence sunSequence = DOTween.Sequence().SetLoops(-1, LoopType.Restart);
-		Sequence spotSequence = DOTween.Sequence().SetLoops(-1, LoopType.Restart);
-
-		foreach (float delay in light_delays)
-		{
-			float rand = UnityEngine.Random.RandomRange(.02f, .08f);
-			sunSequence.Append(sun.DOColor(sunBrightColor, .02f).SetDelay(delay));
-			spotSequence.Append(spot.DOColor(spotBrightColor, .02f).SetDelay(delay));
-			sunSequence.Append(sun.DOColor(sunColor, rand).SetDelay(.06f));
-			spotSequence.Append(spot.DOColor(spotColor, rand).SetDelay(.06f));
-		}
-	}
-
-
-	// DATA MANAGER
-	[HarmonyPrefix]
-	[HarmonyPatch(typeof(DataManager), nameof(DataManager.LoadBuildData))]
-	public static void PreLoadBuildData(ref string path, ref bool UseResources, ref bool UseFullPath, DataManager __instance)
-	{
-		if (!isLoadingModRace) return;
-		if (filenames.Contains(path))
-		{
-			UseResources = false;
-			UseFullPath = false;
-			path = $"Machine/{path}.es3";
-		}
-	}
-
-
-	// MACHINE MANAGER
-	// This is where stats are faked. Player stats are capped here too.
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(StatusManager), nameof(StatusManager.Update))]
-	public static void PostUpdateMachine(StatusManager __instance)
-	{
-		if (GameVariable.Match_Key != "GP_10_4") return;
-
-		if (__instance.IsMyPlayer)
-		{
-			if (__instance.IsInJKR())
-				Application.Quit();
-			if (__instance.MaxLockRange > 500)
-				__instance.MaxLockRange = 500;
-		}
-		else
-		{
-			if (bossnames.Contains(__instance.MachineName))
-			{
-				int idx = bossnames.IndexOf(__instance.MachineName);
-				var stats = bossStats[filenames[idx]];
-				__instance.MaxHealth = stats["health"];
-				__instance.Shield = stats["shield"];
-				__instance.Weight = stats["weight"];
-				__instance.Generation = stats["generation"];
-				__instance.MaxEnergy = stats["maxEnergy"];
-				__instance.Cooling = stats["cooling"];
-				__instance.MaxHeat = stats["maxHeat"];
-				__instance.GroundOffset = stats["groundOffset"]; // This is how Castigator "flies".
-				__instance.ActionSpeedMultiplier = stats["driveSpeed"];
-				__instance.MaxLockRange = stats["lockRange"];
-				__instance.LockSpeed = stats["lockSpeed"];
-			}
-			// This is the custom movement boundary so they don't sit in the arena borders. This is presumably no longer required, since that "bug" was instead caused by insane stun times. Maybe remove it?
-			// __instance.transform.position = new(Mathf.Clamp(__instance.transform.position.x, 785, 1320), __instance.transform.position.y, Mathf.Clamp(__instance.transform.position.x, 470, 1575));
-		}
-	}
-
-	// Never tested this. I think this happens when someone uses Diffractors?
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineManager), nameof(MachineManager.UpdateParamOnSeparation))]
-	public static void UpdateParamOnSeparation(MachineManager __instance)
-	{
-		if (!isInModRace) return;
-		Plugin.LogInfo(__instance._statusManager?.MachineName);
-		if (__instance._statusManager.IsMyPlayer)
-		{
-			if (__instance._statusManager.MaxLockRange > 500)
-				__instance._statusManager.MaxLockRange = 500;
-		}
-	}
-
-	private static bool retarget = false;
-	private static float retargetTimer = 0;
-	// Begin force retargetting delay
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineManager), nameof(MachineManager.SetReturnPoint))]
-	public static void SetReturnPoint(MachineManager __instance)
-	{
-		if (!isInModRace) return;
-		retarget = true;
-		retargetTimer = 0;
-	}
-
-	// Force retarget the AIs to bypass a vanilla bug. The AIs are forcibly spun towards the player, which from what I've seen,
-	// should be enough to attract their attention. This is why my AIs have absurd lock range.
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineManager), nameof(MachineManager.Update))]
-	public static void Retarget()
-	{
-		if (!isInModRace) return;
-		if (!retarget) return;
-		retargetTimer += Time.deltaTime;
-		if (retargetTimer < 5.5f) return;
-		retarget = false;
-		retargetTimer = 0;
-
-		for (int i = 1; i < 3; i++)
-		{
-			GameObject player = AllPlayerData.ins.Players[0].Relay.gameObject;
-			if (!player) return;
-			if (player.active == false) return;
-			LockTarget playerLock = player.transform.Find("Lock-on").Find("MyLockTarget").GetComponent<LockTarget>();
-			if (!playerLock) return;
-			GameObject self = AllPlayerData.ins.Players[i].Relay.gameObject;
-			if (!self) return;
-			if (self.active == false) return;
-			if (self.GetComponent<StatusManager>()?.IsEnable == false) return;
-			if (self.GetComponent<FireControl>()?.IsEnable == false) return;
-			if (self.transform.Find("AI").GetComponent<AI_Main>()?.AI_Control == false) return;
-
-			self.transform.GetComponent<Rigidbody>()?.rotation = Quaternion.LookRotation(player.transform.position - self.transform.position);
-			player.transform.Find("AI").GetComponent<AI_Main>()?._CurrentLockTarget = playerLock;
-		}
-	}
-
-
-	// STATUS MANAGER
-	// This is how I get bosses out of play to "spawn" them later.
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(StatusManager), nameof(StatusManager.SetEnable))]
-	public static void SetEnable(StatusManager __instance, bool IsEnable)
-	{
-		if (!isInModRace) return;
-		if (bossnames.Contains(__instance.MachineName) && IsEnable == true)
-		{
-			int idx = bossnames.IndexOf(__instance.MachineName);
-			if (bossStats[filenames[idx]]["delayedSpawn"] == true)
-			{
-				__instance.gameObject.transform.position = new(4000, 100, 1000);
-				__instance.gameObject.active = false;
+				var newBtn = GameObject.Instantiate(sampleBtn.gameObject);
+				newBtn.transform.SetParent(sampleBtn.transform.parent);
+				newArr[i] = newBtn.GetComponent<Button>();
 			}
 		}
 	}
 
-	// This blocks bosses from respawning. Causes a few non-fatal errors in the console.
-	[HarmonyPrefix]
-	[HarmonyPatch(typeof(StatusManager._BreakRoutine_d__133), nameof(StatusManager._BreakRoutine_d__133.MoveNext))]
-	public static void CallRespawn(StatusManager._BreakRoutine_d__133 __instance, bool __result)
+	public static GameObject ModLoadModule(string key, Shader shader = null)
 	{
-		if (!isInModRace) return;
-		if (bossnames.Contains(__instance.__4__this.MachineName))
-		{
-			int idx = bossnames.IndexOf(__instance.__4__this.MachineName);
-			__instance.__4__this.gameObject.active = false;
-			UI.deadBosses[idx] = true;
-		}
-	}
+		GameObject module = GameObject.Instantiate(Plugin.assets.LoadAsset<GameObject>("Dragonite3.prefab"));
 
-	// This is where I modify the stun time.
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(StatusManager), nameof(StatusManager.SetRigor))]
-	public static void SetRigor(StatusManager __instance, ref float time)
-	{
-		if (!isInModRace) return;
-		if (bossnames.Contains(__instance.MachineName))
-			__instance.RigorTime = 2f;
+		MeshRenderer moduleMesh = module.transform.GetChild(0).GetComponent<MeshRenderer>();
+
+		ModuleData moduleData = module.AddComponent<ModuleData>();
+		moduleData.Data = moduleDefs[key];
+		moduleData._FileName = "Module/" + moduleDefs[key].name;
+		moduleData.AllRenderer = new([moduleMesh]);
+
+		ModuleEffects moduleEffects = module.AddComponent<ModuleEffects>();
+		moduleEffects._MD = moduleData;
+
+		GameObject moduleSelectorBox = module.transform.GetChild(0).GetChild(0).gameObject;
+		moduleSelectorBox.layer = 29; // "Module"
+
+		CollisionFitter colFitter = moduleSelectorBox.transform.GetChild(0).gameObject.AddComponent<CollisionFitter>();
+		colFitter.targetCollider = moduleSelectorBox.GetComponent<BoxCollider>();
+
+		if (shader) foreach (var mat in moduleMesh.materials) // This didn't seem necessary when I loaded everything from scratch.
+		{
+			mat.shader = shader;
+			mat.SetFloat("_MetallicPow", 0f);
+		}
+
+		return module;
 	}
 }
