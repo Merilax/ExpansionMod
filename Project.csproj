@@ -19,7 +19,8 @@
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.*" IncludeAssets="compile" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\lib\Public\Assembly-CSharp.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Break Arts III\BepInEx\interop\Assembly-CSharp.dll</HintPath> 
+      <Private>false</Private>
     </Reference>
     <Reference Include="CoreModule">
       <HintPath>..\lib\Public\UnityEngine.CoreModule.dll</HintPath>
@@ -38,6 +39,9 @@
     </Reference>
     <Reference Include="UnityEngineUIModule">
       <HintPath>..\lib\Public\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngineJSONSerialize">
+      <HintPath>..\lib\Public\UnityEngine.JSONSerializeModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngineUIElements">
       <HintPath>..\lib\Public\UnityEngine.UIElementsModule.dll</HintPath>
@@ -72,8 +76,11 @@
     <Reference Include="FusionRuntime">
       <HintPath>..\lib\Public\Fusion.Runtime.dll</HintPath>
     </Reference>
-    <Reference Include="Crest">
-      <HintPath>..\lib\Public\Crest.dll</HintPath>
+    <Reference Include="UnityAddressables">
+      <HintPath>..\lib\Public\Unity.Addressables.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityResourceManager">
+      <HintPath>..\lib\Public\Unity.ResourceManager.dll</HintPath>
     </Reference>
     <Reference Include="DOTween">
       <HintPath>..\lib\Public\DOTween.dll</HintPath>

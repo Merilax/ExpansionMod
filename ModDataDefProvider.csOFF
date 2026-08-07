@@ -1,0 +1,37 @@
+using UnityEngine.ResourceManagement.ResourceProviders;
+using Il2CppInterop.Runtime.Injection;
+using System;
+
+namespace ExpansionMod;
+
+public class ModuleTranslationResourceProvider : ResourceProviderBase 
+{
+	public ModuleTranslationResourceProvider(IntPtr ptr) : base(ptr) { }
+
+	public ModuleTranslationResourceProvider() : base(ClassInjector.DerivedConstructorPointer<ModuleTranslationResourceProvider>())
+	{
+		ClassInjector.DerivedConstructorBody(this);
+		m_ProviderId = "ModuleTranslationResourceProvider";
+	}
+
+	public override void Provide(ProvideHandle provideHandle)
+	{
+		string key = provideHandle.Location.PrimaryKey;
+
+		Plugin.LogInfo("Provide:" + key);
+		if (key.Contains("Translation_"))
+		{
+			TranslationTable result = null;
+			if (ModuleDefs.moduleDataDefs.ContainsKey(key))
+				result = ModuleDefs.moduleDataDefs[key];
+
+			if (result == null)
+			{
+				provideHandle.Complete<ModuleDataDef>(null, false, new Il2CppSystem.Exception($"No such TranslationTable registered for key {key}"));
+				return;
+			}
+
+			provideHandle.Complete(result, true, null);
+		}
+	}
+}

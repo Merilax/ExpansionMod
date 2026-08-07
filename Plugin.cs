@@ -1,14 +1,8 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using BepInEx;
-using BepInEx.Configuration;
+﻿using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
-using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
-using UnityEngine.InputSystem;
-using UnityEngine.UI;
 
 namespace ExpansionMod;
 
@@ -18,205 +12,137 @@ namespace ExpansionMod;
 public class Plugin : BasePlugin
 {
 	internal static new ManualLogSource Log;
-	public static ConfigFile config;
-	public static UniverseLib.AssetBundle assets;
+
+	public static string BUNDLE_ROOT;
 	public override void Load()
 	{
 		Log = BepInEx.Logging.Logger.CreateLogSource("ExpansionMod");
 
-		string bundlePath = Path.Combine(Paths.PluginPath, "ExpansionMod", "modelassets");
-		if (!File.Exists(bundlePath))
-			throw new System.Exception($"Bundle not found at: {bundlePath}");
-
-		assets = UniverseLib.AssetBundle.LoadFromFile(bundlePath) ?? throw new System.Exception("Failed to load assets!");
+		BUNDLE_ROOT = System.IO.Path.Combine(Paths.PluginPath, "ExpansionMod/");
 
 		var harmony = Harmony.CreateAndPatchAll(typeof(Main));
-		harmony.PatchAll(typeof(UI));
+
+		// var options = new RegisterTypeOptions
+		// {
+		// 	Interfaces = new Il2CppInterfaceCollection([typeof(IResourceProvider)])
+		// };
+		// ClassInjector.RegisterTypeInIl2Cpp(typeof(ModuleDataDefResourceProvider), options);
+
+		// ClassInjector.RegisterTypeInIl2Cpp(typeof(TranslationTable));
+		IL2CPPChainloader.AddUnityComponent<ModModuleLoader>();
+		IL2CPPChainloader.AddUnityComponent<AsyncHandler>();
+
+		ModBundleParser.ParseModBundles();
+		ModuleRegistrator.PopulateModuleList();
+		ModuleRegistrator.PopulateThumbnails();
 	}
 	public static void LogInfo(object data) => Log.LogInfo(data);
+
 }
 
 public class Main
 {
 	public static bool init = false;
+	public static Shader mechShader;
 
-	public static Dictionary<string, ModuleDataDef> moduleDefs = [];
-	public static List<List<ModuleList>> moduleLists = [
-		[], // Armor
-		[], // Heat
-		[], // Gene
-		[], // Detec
-		[], // Thr
-		[], // Ctrl
-		[], // Sp
-		[], // Wep
-		[], // Joint
-		[], // Orna
-	];
-
+	private static void OnLogMessage(string condition, string stackTrace, LogType type)
+	{
+		if (type == LogType.Error || type == LogType.Exception)
+		{
+			Plugin.Log.LogError(condition + "\n" + stackTrace);
+		}
+	}
 	// INIT
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(Scene_GameInit), nameof(Scene_GameInit.Start))]
+	public static void GameInitStart()
+	{
+		Plugin.LogInfo("Initializing game logic...");
+		Config.Debug_OutputRawSaveData = true;
+		// Config.Debug_ShowAllItems = true;
+
+		ModAssetHandler.AcquireVanillaAssets();
+	}
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(Scene_GameInit), nameof(Scene_GameInit.Start))]
-	public static void GameInitStart(Scene_MainMenu __instance)
+	public static void GameInitStart_Post()
 	{
-		moduleDefs.Add("ExpansionMod_0001", new()
-		{
-			name = "ExpansionMod_0001",
-			_Name = "H_99 Name",
-			_Structure = 2,
-			_DescriptionId = 8,
-			_DescriptionKey = TranslationList.Keys.module_detail,
-			_DescriptionPrefix = "e_",
-			// _Preview = null
-		});
-		moduleLists[9].Add(new()
-		{
-			_MdName = "ExpansionMod_0001",
-			_name = "Heat_99",
-		});
-
-
-		for (int i = 0; i < AllItemList.AllModuleList.Count; i++)
-		{
-			if (moduleLists[i].Count == 0) continue;
-
-			int oldLength = AllItemList.AllModuleList[i].Count;
-			int newLength = oldLength + moduleLists[i].Count;
-			var newArr = new Il2CppReferenceArray<ModuleList>(newLength);
-
-			for (int j = 0; j < newLength; j++)
-			{
-				if (j < oldLength)
-					newArr[j] = AllItemList.AllModuleList[i][j];
-				else
-					newArr[j] = moduleLists[i][j - oldLength];
-			}
-			AllItemList.AllModuleList[i] = newArr;
-		}
+		ModuleRegistrator.PopulateLocalization();
 	}
 
 	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.Update))]
-	public static void MachineDesignerMainUpdate(MachineDesignerMain __instance)
+	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.Start))]
+	public static void MachineDesignerMainStart(MachineDesignerMain __instance)
 	{
-		if (Keyboard.current.jKey.wasPressedThisFrame)
-		{
-			var sampleMesh = __instance._MM.transform.GetChild(1).GetChild(0).GetChild(0).GetComponent<SkinnedMeshRenderer>();
-
-			GameObject module = ModLoadModule("ExpansionMod_0001", sampleMesh.material.shader);
-
-			// Vanilla-like processing
-			__instance.Install_ControlModule = module;
-			__instance.SetInstallPhase(MachineDesignerMain.Install_ControlPhase.Grab);
-			__instance.Install_ActivateAllMarkers(ModuleData.ModuleType.Normal);
-			module.GetComponent<ModuleData>().Init();
-			module.GetComponent<ModuleEffects>().SetBasicData(__instance._BM, __instance._MM);
-			module.GetComponent<ModuleEffects>().InitSelectedEffets();
-			__instance.Install_SetAllThrusterDirSign(true, null);
-		}
+		mechShader = __instance._BM.MyMainMats[0].shader;
 	}
 
+	// [HarmonyPostfix]
+	// [HarmonyPatch(typeof(AnimationManager), nameof(AnimationManager.Awake))]
+	// public static void AnimationManagerUpdate(AnimationManager __instance, ref bool __runOriginal)
+	// {
+	// 	__instance._CommandStates.Add(AnimationManager.AllAnimations.Idle, true);
+	// }
+
 	[HarmonyPrefix]
-	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.ModuleLoader))]
-	public static void ModuleLoader(MachineDesignerMain __instance, string path)
+	[HarmonyPatch(typeof(MachineDesignerMain._ModuleLoader_d__86), nameof(MachineDesignerMain._ModuleLoader_d__86.MoveNext))]
+	public static void ModuleLoader(MachineDesignerMain._ModuleLoader_d__86 __instance, ref bool __runOriginal, ref bool __result)
 	{
-		// Plugin.LogInfo(path);
+		Plugin.LogInfo("ModuleLoader: " + __instance.path);
+		if (ModBundleParser.IsValidPrefix(__instance.path))
+		{
+			if (__instance.__1__state == 1 && __instance._handle_5__2.IsValid() && __instance._handle_5__2.Status == UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationStatus.Succeeded)
+			{
+				Plugin.LogInfo("HIT");
+				GameObject module = __instance._handle_5__2.Result;
+				ModModuleLoader.SetupModule(module, __instance.path);
+			}
+		}
 	}
 
 	[HarmonyPrefix]
 	[HarmonyPatch(typeof(DataManager), nameof(DataManager.GetUnlockStatus))]
 	public static void GetUnlockStatus(ref string key, ref bool __runOriginal, ref DataManager.UnlockStatus __result)
 	{
-		Plugin.LogInfo("GetUnlockStatus: " + key);
-		if (key.Contains("ExpansionMod"))
+		// Plugin.LogInfo("GetUnlockStatus: " + key);
+		if (ModBundleParser.IsValidPrefix(key))
 		{
-			Plugin.LogInfo("Custom plugin unlocked");	
 			__runOriginal = false;
 			__result = DataManager.UnlockStatus.unlocked;
 		}
 	}
 
-	[HarmonyPrefix]
+	[HarmonyPostfix]
 	[HarmonyPatch(typeof(Pooler), nameof(Pooler.InstantiateModuleSync))]
 	public static void InstantiateModuleSync(ref string name, ref bool __runOriginal, ref GameObject __result)
 	{
-		// Plugin.LogInfo("InstantiateModuleSync: " + name);
-		if (name.Contains("ExpansionMod"))
+		Plugin.LogInfo("InstantiateModuleSync: " + name);
+		if (ModBundleParser.IsValidPrefix(name))
 		{
-			__runOriginal = false;
-			__result = ModLoadModule(name.Substring(7));
+			ModModuleLoader.SetupModule(__result, name);
 		}
 	}
 
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.GetUnlockedList))]
-	public static void GetUnlockedList(int type, int cat, ref Il2CppReferenceArray<ModuleList> __result)
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Install_ShowModuleInfo))]
+	public static void Install_ShowModuleInfo(MachineDesignerUI __instance, int sumbNum, int dataNum)
 	{
-		Plugin.LogInfo("GetUnlockedList: " + type + " " + cat);
-		foreach (var item in __result)
-		{
-			Plugin.LogInfo(item._name);
-		}
+		// Plugin.LogInfo($"Install_ShowModuleInfo: {sumbNum} / {dataNum}");
+	}
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(MyUtility), nameof(MyUtility.GetModuleInfo))]
+	public static void GetModuleInfo(MyUtility __instance, ref ModuleDataDef data, ref bool IsSmall)
+	{
+		// Plugin.LogInfo($"GetModuleInfo: {data._Name} / {IsSmall}");
 	}
 
-	// [HarmonyPrefix]
-	// [HarmonyPatch(typeof(MachineDesignerMain._ModuleLoader_d__86), nameof(MachineDesignerMain._ModuleLoader_d__86.MoveNext))]
-	// public static void ModuleLoader(MachineDesignerMain._ModuleLoader_d__86 __instance)
-	// {
-	// 	var ins = __instance.__4__this;
-	// 	Plugin.LogInfo("Loader: " + __instance.path);
-	// }
-
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.InitSumbnails))]
-	public static void ExtendDesignerThumbnailButtons(MachineDesignerUI __instance)
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(UsingController), nameof(UsingController.UpdateEffectsColor))]
+	[HarmonyPatch(typeof(UsingController), nameof(UsingController.UpdateVFXPower))]
+	[HarmonyPatch(typeof(UsingController), nameof(UsingController.ForceStopCharging))]
+	[HarmonyPatch(typeof(UsingController), nameof(UsingController.PlayUseEffects))]
+	public static void UpdateEffectsColor(UsingController __instance, ref bool __runOriginal)
 	{
-		int totalModuleCount = 0;
-		foreach (var item in moduleLists) totalModuleCount += item.Count;
-
-		Button sampleBtn = __instance.AllSumbnails[0];
-
-		var newArr = new Il2CppReferenceArray<Button>(__instance.AllSumbnails.Count + totalModuleCount);
-
-		for (int i = 0; i < __instance.AllSumbnails.Count + totalModuleCount; i++)
-		{
-			if (i < __instance.AllSumbnails.Count)
-				newArr[i] = __instance.AllSumbnails[i];
-			else
-			{
-				var newBtn = GameObject.Instantiate(sampleBtn.gameObject);
-				newBtn.transform.SetParent(sampleBtn.transform.parent);
-				newArr[i] = newBtn.GetComponent<Button>();
-			}
-		}
-	}
-
-	public static GameObject ModLoadModule(string key, Shader shader = null)
-	{
-		GameObject module = GameObject.Instantiate(Plugin.assets.LoadAsset<GameObject>("Dragonite3.prefab"));
-
-		MeshRenderer moduleMesh = module.transform.GetChild(0).GetComponent<MeshRenderer>();
-
-		ModuleData moduleData = module.AddComponent<ModuleData>();
-		moduleData.Data = moduleDefs[key];
-		moduleData._FileName = "Module/" + moduleDefs[key].name;
-		moduleData.AllRenderer = new([moduleMesh]);
-
-		ModuleEffects moduleEffects = module.AddComponent<ModuleEffects>();
-		moduleEffects._MD = moduleData;
-
-		GameObject moduleSelectorBox = module.transform.GetChild(0).GetChild(0).gameObject;
-		moduleSelectorBox.layer = 29; // "Module"
-
-		CollisionFitter colFitter = moduleSelectorBox.transform.GetChild(0).gameObject.AddComponent<CollisionFitter>();
-		colFitter.targetCollider = moduleSelectorBox.GetComponent<BoxCollider>();
-
-		if (shader) foreach (var mat in moduleMesh.materials) // This didn't seem necessary when I loaded everything from scratch.
-		{
-			mat.shader = shader;
-			mat.SetFloat("_MetallicPow", 0f);
-		}
-
-		return module;
+		// if (!__instance._VFX) __runOriginal = false;
 	}
 }
