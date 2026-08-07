@@ -5,6 +5,5 @@ obj
 *.zip
 *.lscache
 .vs
-Typed Assets.md
-Untyped Assets.txt
+Test/
 *.csOFF
