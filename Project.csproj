@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <AssemblyName>ExpansionMod</AssemblyName>
-    <Product>Expansion Mod</Product>
-    <Version>0.0.1</Version>
+    <AssemblyName>ArchExpansionMod</AssemblyName>
+    <Product>Architect's Expansion Mod</Product>
+    <Version>1.0.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -12,7 +12,7 @@
       https://nuget.bepinex.dev/v3/index.json;
       https://nuget.samboy.dev/v3/index.json
     </RestoreAdditionalProjectSources>
-    <RootNamespace>ExpansionMod</RootNamespace>
+    <RootNamespace>ArchExpansionMod</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +22,9 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Break Arts III\BepInEx\interop\Assembly-CSharp.dll</HintPath> 
       <Private>false</Private>
     </Reference>
+    <Reference Include="ArchEmperorLib">
+      <HintPath>..\lib\ArchEmperorLib.dll</HintPath>
+    </Reference>
     <Reference Include="CoreModule">
       <HintPath>..\lib\Public\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
@@ -29,7 +32,7 @@
       <HintPath>..\lib\Public\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngineUI">
-      <HintPath>..\lib\Public\UnityEngine.UI.dll</HintPath>
+      <HintPath>..\lib\PUBLIC\UnityEngine.UI.dll</HintPath>
     </Reference>
     <Reference Include="InputSystem">
       <HintPath>..\lib\Public\Unity.InputSystem.dll</HintPath>
@@ -37,23 +40,14 @@
     <Reference Include="UnityEnginePhysics">
       <HintPath>..\lib\Public\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
-    <Reference Include="UnityEngineUIModule">
-      <HintPath>..\lib\Public\UnityEngine.UIModule.dll</HintPath>
-    </Reference>
     <Reference Include="UnityEngineJSONSerialize">
       <HintPath>..\lib\Public\UnityEngine.JSONSerializeModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngineUIElements">
-      <HintPath>..\lib\Public\UnityEngine.UIElementsModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityLocalization">
       <HintPath>..\lib\Public\Unity.Localization.dll</HintPath>
     </Reference>
     <Reference Include="Il2Cppmscorlib">
       <HintPath>..\lib\Public\Il2Cppmscorlib.dll</HintPath>
-    </Reference>
-    <Reference Include="TextMeshProUGUI">
-      <HintPath>..\lib\Public\Unity.TextMeshPro.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngineRendering">
       <HintPath>..\lib\Public\Unity.RenderPipelines.Core.Runtime.dll</HintPath>
@@ -64,17 +58,17 @@
     <Reference Include="UnityEngineRenderingHDConfig">
       <HintPath>..\lib\Public\Unity.RenderPipelines.HighDefinition.Config.Runtime.dll</HintPath>
     </Reference>
+    <Reference Include="UnityTextRendering">
+      <HintPath>..\lib\PUBLIC\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="TextMeshProUGUI">
+      <HintPath>..\lib\PUBLIC\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngineVFX">
       <HintPath>..\lib\Public\UnityEngine.VFXModule.dll</HintPath>
     </Reference>
-    <Reference Include="UnityCinemachine">
-      <HintPath>..\lib\Public\Unity.Cinemachine.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityTextRendering">
-      <HintPath>..\lib\Public\UnityEngine.TextRenderingModule.dll</HintPath>
-    </Reference>
-    <Reference Include="FusionRuntime">
-      <HintPath>..\lib\Public\Fusion.Runtime.dll</HintPath>
+    <Reference Include="UnityEngineAudio">
+      <HintPath>..\lib\Public\UnityEngine.AudioModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityAddressables">
       <HintPath>..\lib\Public\Unity.Addressables.dll</HintPath>
@@ -82,17 +76,8 @@
     <Reference Include="UnityResourceManager">
       <HintPath>..\lib\Public\Unity.ResourceManager.dll</HintPath>
     </Reference>
-    <Reference Include="DOTween">
-      <HintPath>..\lib\Public\DOTween.dll</HintPath>
-    </Reference>
-    <Reference Include="DOTweenPro">
-      <HintPath>..\lib\Public\DOTweenPro.dll</HintPath>
-    </Reference>
     <Reference Include="UnityEngineAssetBundle">
       <HintPath>..\lib\Public\UnityEngine.AssetBundleModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngineAudio">
-      <HintPath>..\lib\Public\UnityEngine.AudioModule.dll</HintPath>
     </Reference>
     <Reference Include="UniverseLib">
       <HintPath>..\lib\UniverseLib.BIE.IL2CPP.Interop.dll</HintPath>

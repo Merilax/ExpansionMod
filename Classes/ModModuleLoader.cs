@@ -1,11 +1,8 @@
-using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 using UnityEngine.VFX;
 
-namespace ExpansionMod;
+namespace ArchExpansionMod;
 
 public class ModModuleLoader : MonoBehaviour
 {
@@ -24,53 +21,39 @@ public class ModModuleLoader : MonoBehaviour
 		instance = this;
 		DontDestroyOnLoad(this);
 	}
-
-	public static IEnumerator ModLoadModule(MachineDesignerMain MDM, string key)
+	public static void Start()
 	{
-		GameObject module = null;
-
-		var handle = AsyncHandler.LoadAsync<GameObject>(key);
-		handle.execute = true;
-		handle.OnLoadFailedEvent += () => throw new System.Exception($"Failed to load module {key}");
-		handle.OnLoadCompleteEvent += () =>
-		{
-			module = handle.handle.Result.Cast<GameObject>();
-		};
-
-		yield return new WaitUntil((Func<bool>)(() => module != null));
-
-		SetupModule(module, key);
-
-		yield return module;
-	}
-
-	public static GameObject ModLoadModuleSync(string key)
-	{
-		var op = Addressables.LoadAssetAsync<GameObject>(key);
-		GameObject module = op.WaitForCompletion();
-
-		SetupModule(module, key);
-
-		op.Release();
-		return module;
+		
 	}
 
 	public static void SetupModule(GameObject module, string key)
 	{
 		ModuleData moduleData = module.GetComponent<ModuleData>();
-		moduleData._FileName = "Module/" + key;
+		Plugin.LogDebug(key);
+		Plugin.LogDebug(moduleData._FileName);
+
+		if (key.StartsWith("Module/")) moduleData._FileName = key;
+		else moduleData._FileName = "Module/" + key;
+
 
 		BoxCollider moduleSelector = module.GetComponentInChildren<BoxCollider>();
 		if (!moduleSelector)
 			Plugin.Log.LogError($"Module {key} has no BoxCollider selector");
 
+		string[] validMaterials = ["M_Main", "M_Sub", "M_Mecha", "M_Accent", "M_Light", "M_Belly", "M_Tube", "M_SubLight", "M_Tentacle"];
 		if (Main.mechShader)
 			foreach (var mats in moduleData.AllRenderer)
 			{
 				foreach (var mat in mats.materials)
 				{
-					mat.shader = Main.mechShader;
-					mat.SetFloat("_MetallicPow", 0f);
+					foreach (var validMat in validMaterials)
+					{
+						if (mat.name.Contains(validMat))
+						{
+							mat.shader = Main.mechShader;
+							mat.SetFloat("_MetallicPow", 0f);
+						}
+					}
 				}
 			}
 
@@ -81,32 +64,25 @@ public class ModModuleLoader : MonoBehaviour
 	{
 		// Connectors
 		foreach (ConnectTarget CT in data.ConnectorsCT)
-		{
 			SetupConnector(CT);
-		}
-
 		// Accelerators
 		if (data.Data._ThrusterType == ModuleDataDef.ThrusterTypeList.Acc || data.Data._ThrusterType == ModuleDataDef.ThrusterTypeList.Det)
-		{
 			SetupThruster(module, data);
-		}
-
 		// Emitters
 		if (data.Data._Category == (TranslationList.CategoryTranslationKey)1)
-		{
 			SetupEmitter(module, data);
-		}
 	}
 
 	public static void SetupConnector(ConnectTarget CT)
 	{
-		// Plugin.LogInfo(markers["Connector"].gameObject);
-		GameObject marker = Instantiate<GameObject>(markers["Connector"].gameObject);
-		marker.transform.localPosition = CT._Marker.gameObject.transform.localPosition;
-		marker.transform.rotation = CT._Marker.gameObject.transform.rotation;
-		marker.transform.SetParent(CT._Marker.gameObject.transform.parent);
+		// Plugin.LogDebug(markers["Connector"].gameObject);
+		GameObject newMarker = Instantiate<GameObject>(markers["Connector"].gameObject);
+		newMarker.transform.SetParent(CT._Marker.gameObject.transform.parent);
+		newMarker.transform.localPosition = new(0,0,.007f);//CT._Marker.gameObject.transform.localPosition;
+		newMarker.transform.localRotation = CT._Marker.gameObject.transform.localRotation;
+		if (CT._ConnectType == ConnectTarget.ConnectType.Half) newMarker.transform.localScale = new(.68f, .68f, .68f);
 		DestroyImmediate(CT._Marker);
-		CT._Marker = marker;
+		CT._Marker = newMarker;
 	}
 	public static void SetupThruster(GameObject module, ModuleData data)
 	{
@@ -115,14 +91,22 @@ public class ModModuleLoader : MonoBehaviour
 		{
 			if (thruster._Trail)
 			{
-				// Plugin.LogInfo(ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name]);
-				thruster._Trail.visualEffectAsset = ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name];
+				Plugin.LogDebug(ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name]);
+				try
+				{
+					thruster._Trail.visualEffectAsset = ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name];
+				}
+				catch (System.Exception) { }
 			}
 
 			foreach (VisualEffect vfx in thruster._VFXs)
 			{
-				// Plugin.LogInfo(ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name]);
-				vfx.visualEffectAsset = ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name];
+				Plugin.LogDebug(ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name]);
+				try
+				{
+					vfx.visualEffectAsset = ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name];
+				}
+				catch (System.Exception) { }
 			}
 
 			GameObject SDS = null;
@@ -139,21 +123,24 @@ public class ModModuleLoader : MonoBehaviour
 	public static void SetupEmitter(GameObject module, ModuleData data)
 	{
 		UsingController UC = module.GetComponent<UsingController>();
-		// Plugin.LogInfo(UC._VFX.visualEffectAsset.name);
-		UC._VFX.visualEffectAsset = ModAssetHandler.vfxAssets["EmtterUse_Basic"];//UC._VFX.visualEffectAsset.name];
-		UC._chargingVFX.visualEffectAsset = ModAssetHandler.vfxAssets["EmitterUse_Charging"];//UC._chargingVFX.visualEffectAsset.name];
-		UC._chargingSE.clip = ModAssetHandler.audioClips[UC._chargingSE.clip.name];
+		Plugin.LogDebug(UC._VFX.visualEffectAsset.name);
+		try
+		{
+			UC._VFX.visualEffectAsset = ModAssetHandler.vfxAssets[UC._VFX.visualEffectAsset.name];
+		}
+		catch (System.Exception) { }
+		try
+		{
+			UC._chargingVFX.visualEffectAsset = ModAssetHandler.vfxAssets[UC._chargingVFX.visualEffectAsset.name];
+		}
+		catch (System.Exception) { }
+		try
+		{
+			UC._chargingSE.clip = ModAssetHandler.audioClips[UC._chargingSE.clip.name];
+		}
+		catch (System.Exception) { }
 	}
 
-	public static Renderer GetMesh(Transform xform)
-	{
-		for (int i = 0; i < xform.childCount; i++)
-		{
-			Renderer mesh = xform.GetChild(i).GetComponent<Renderer>();
-			if (mesh) return mesh;
-		}
-		return null;
-	}
 	public static BoxCollider GetBoxCollider(Transform xform)
 	{
 		BoxCollider box = xform.GetComponent<BoxCollider>();

@@ -2,15 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using ArchEmperorLib;
 using BepInEx;
 
-namespace ExpansionMod;
+namespace ArchExpansionMod;
 
 public class ModBundleParser
 {
 	public class ModDefinition
 	{
 		public string bundleName = "";
+		public string bundleVersion = "";
 		public int moduleCount = 0;
 		public List<string> armors = [];
 		public List<string> coolers = [];
@@ -26,12 +28,14 @@ public class ModBundleParser
 	}
 
 	public static List<ModDefinition> pendingLoadModDefs = [];
+	// public static List<ModDefinition> loadedModDefs = [];
 	public static List<ModDefinition> loadedModDefs = [];
+	public static List<BundleRecord> loadedModRecords = [];
 	public static List<string> registeredPrefixes = [];
 
 	public static void ParseModBundles()
 	{
-		string contentRoot = Path.Combine(Paths.PluginPath, "ExpansionMod");
+		string contentRoot = Path.Combine(Paths.PluginPath, Plugin.BUNDLE_ROOT);
 
 		if (!Directory.Exists(contentRoot)) Directory.CreateDirectory(contentRoot);
 		string[] dirs = Directory.GetDirectories(contentRoot);
@@ -50,7 +54,6 @@ public class ModBundleParser
 				string jsonStr = File.ReadAllText(Path.Combine(dirPath, "manifest.json"));
 
 				ModDefinition modDef = JsonSerializer.Deserialize<ModDefinition>(jsonStr, new JsonSerializerOptions() { IncludeFields = true }); // WriteIndented = true
-				Plugin.LogInfo(modDef.bundleName);
 
 				if (modDef.bundleName == null || modDef.bundleName.Length <= 0)
 				{
@@ -70,6 +73,7 @@ public class ModBundleParser
 				}
 
 				pendingLoadModDefs.Add(modDef);
+				loadedModRecords.Add(new(modDef.bundleName, modDef.bundleVersion));
 			}
 			catch (Exception ex)
 			{

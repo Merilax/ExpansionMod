@@ -10,7 +10,7 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.VFX;
 
-namespace ExpansionMod;
+namespace ArchExpansionMod;
 
 public class ModAssetHandler
 {
@@ -75,7 +75,7 @@ public class ModAssetHandler
 					string moduleRoot = $"Assets/{modDef.bundleName}/Modules/{categories[i]}/";
 					try
 					{
-						Plugin.LogInfo($"Registering module definition {itemName}...");
+						Plugin.LogDebug($"Registering module definition {itemName}...");
 						if (itemName.Length <= 0) continue;
 
 						ModuleList moduleList = new() { _MdName = $"{modDef.bundleName}_{itemName}_DataDef", _name = $"{modDef.bundleName}_{itemName}" };
@@ -100,7 +100,7 @@ public class ModAssetHandler
 			Addressables.AddResourceLocator(map.Cast<IResourceLocator>());
 
 			ModBundleParser.loadedModDefs.Add(modDef);
-			ModBundleParser.registeredPrefixes.Add(modDef.bundleName);
+			ModBundleParser.registeredPrefixes.Add(modDef.bundleName + '_');
 
 			Plugin.LogInfo($"Mod bundle {modDef.bundleName} initialized successfully with {loadedModules} modules.");
 		}

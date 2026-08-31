@@ -1,12 +1,10 @@
-using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.Localization.Settings;
-using UnityEngine.Localization.Tables;
 
-namespace ExpansionMod;
+namespace ArchExpansionMod;
 
 public static class ModuleRegistrator
 {
@@ -52,15 +50,8 @@ public static class ModuleRegistrator
 		{
 			foreach (var item in category)
 			{
-				var handle = AsyncHandler.LoadAsync<Sprite>("Sumb_" + item._name);//.Substring(7));
-				handle.execute = true;
-				handle.OnLoadCompleteEvent += () =>
-				{
-					Sprite sprite = Sprite.Instantiate(handle.handle.Result.Cast<Sprite>());
-					ModModuleLoader.thumbnails.Add(sprite);
-					// Pooler.ins.thumbnails.Add(item._name, sprite);
-				};
-				handle.OnLoadFailedEvent += () => throw new Exception("LOAD ERR");
+				Sprite sprite = Addressables.LoadAssetAsync<Sprite>("Sumb_" + item._name).WaitForCompletion();
+				ModModuleLoader.thumbnails.Add(sprite);
 			}
 		}
 	}
@@ -75,14 +66,17 @@ public static class ModuleRegistrator
 		var tableJapanese = strDB.GetTable("Shop", LocalizationSettings.AvailableLocales.Locales[3]);
 
 		foreach (var modDef in ModBundleParser.loadedModDefs)
+		{
+			Plugin.LogDebug("Registering translations for bundle " + modDef.bundleName);
 			foreach (var table in modDef.translationTables)
 			{
 				table.ID = "mod_" + table.ID;
-				// Plugin.LogInfo("Injecting translation ID: " + table.ID);
+				Plugin.LogDebug("Injecting translation ID: " + table.ID);
 				tableChineseSimplified.AddEntry(table.ID, table.SimplifiedChinese);
 				tableChineseTraditional.AddEntry(table.ID, table.TraditionalChinese);
 				tableEnglish.AddEntry(table.ID, table.English);
 				tableJapanese.AddEntry(table.ID, table.Japanese);
 			}
+		}
 	}
 }
