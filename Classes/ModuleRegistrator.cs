@@ -70,7 +70,8 @@ public static class ModuleRegistrator
 			Plugin.LogDebug("Registering translations for bundle " + modDef.bundleName);
 			foreach (var table in modDef.translationTables)
 			{
-				table.ID = "mod_" + table.ID;
+				if (!table.ID.StartsWith("mod_"))
+					table.ID = "mod_" + table.ID;
 				Plugin.LogDebug("Injecting translation ID: " + table.ID);
 				tableChineseSimplified.AddEntry(table.ID, table.SimplifiedChinese);
 				tableChineseTraditional.AddEntry(table.ID, table.TraditionalChinese);

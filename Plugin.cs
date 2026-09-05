@@ -1,10 +1,11 @@
-﻿using BepInEx;
+﻿using ArchEmperorLib;
+using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using UnityEngine;
-using ArchEmperorLib;
+using UnityEngine.Localization.Settings;
 
 namespace ArchExpansionMod;
 
@@ -70,6 +71,7 @@ public class Main
 	public static void GameInitStart_Post()
 	{
 		ModuleRegistrator.PopulateLocalization();
+		LocalizationSettings.add_SelectedLocaleChanged((Il2CppSystem.Action<UnityEngine.Localization.Locale>)((locale) => ModuleRegistrator.PopulateLocalization()));
 	}
 
 	[HarmonyPrefix]

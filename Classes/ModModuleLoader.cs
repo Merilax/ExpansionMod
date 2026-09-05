@@ -23,24 +23,23 @@ public class ModModuleLoader : MonoBehaviour
 	}
 	public static void Start()
 	{
-		
+
 	}
 
 	public static void SetupModule(GameObject module, string key)
 	{
 		ModuleData moduleData = module.GetComponent<ModuleData>();
-		Plugin.LogDebug(key);
-		Plugin.LogDebug(moduleData._FileName);
+		Plugin.LogDebug("Key: " + key);
+		Plugin.LogDebug("FileName: " + moduleData._FileName);
 
 		if (key.StartsWith("Module/")) moduleData._FileName = key;
 		else moduleData._FileName = "Module/" + key;
-
 
 		BoxCollider moduleSelector = module.GetComponentInChildren<BoxCollider>();
 		if (!moduleSelector)
 			Plugin.Log.LogError($"Module {key} has no BoxCollider selector");
 
-		string[] validMaterials = ["M_Main", "M_Sub", "M_Mecha", "M_Accent", "M_Light", "M_Belly", "M_Tube", "M_SubLight", "M_Tentacle"];
+		string[] validMaterials = ["M_Main", "M_Sub", "M_Mecha", "M_Accent", "M_Light", "M_Belly", "M_Tube"];
 		if (Main.mechShader)
 			foreach (var mats in moduleData.AllRenderer)
 			{
@@ -78,7 +77,7 @@ public class ModModuleLoader : MonoBehaviour
 		// Plugin.LogDebug(markers["Connector"].gameObject);
 		GameObject newMarker = Instantiate<GameObject>(markers["Connector"].gameObject);
 		newMarker.transform.SetParent(CT._Marker.gameObject.transform.parent);
-		newMarker.transform.localPosition = new(0,0,.007f);//CT._Marker.gameObject.transform.localPosition;
+		newMarker.transform.localPosition = new(0, 0, .007f);//CT._Marker.gameObject.transform.localPosition;
 		newMarker.transform.localRotation = CT._Marker.gameObject.transform.localRotation;
 		if (CT._ConnectType == ConnectTarget.ConnectType.Half) newMarker.transform.localScale = new(.68f, .68f, .68f);
 		DestroyImmediate(CT._Marker);
@@ -87,6 +86,11 @@ public class ModModuleLoader : MonoBehaviour
 	public static void SetupThruster(GameObject module, ModuleData data)
 	{
 		var thrusterInfos = module.GetComponents<ThrusterInfo>();
+		if (thrusterInfos.Count == 0)
+		{
+			Plugin.Log.LogError($"Module {data._FileName} failed to load: No ThrusterInfo component was found.");
+			return;
+		}
 		foreach (ThrusterInfo thruster in thrusterInfos)
 		{
 			if (thruster._Trail)
@@ -123,6 +127,11 @@ public class ModModuleLoader : MonoBehaviour
 	public static void SetupEmitter(GameObject module, ModuleData data)
 	{
 		UsingController UC = module.GetComponent<UsingController>();
+		if (UC == null)
+		{
+			Plugin.Log.LogError($"Module {data._FileName} failed to load: No UsingController component was found.");
+			return;
+		}
 		Plugin.LogDebug(UC._VFX.visualEffectAsset.name);
 		try
 		{
