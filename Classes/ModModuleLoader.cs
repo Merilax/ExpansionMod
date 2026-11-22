@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using HarmonyLib;
 using UnityEngine;
 using UnityEngine.VFX;
 
@@ -21,40 +23,58 @@ public class ModModuleLoader : MonoBehaviour
 		instance = this;
 		DontDestroyOnLoad(this);
 	}
-	public static void Start()
-	{
-
-	}
 
 	public static void SetupModule(GameObject module, string key)
 	{
 		ModuleData moduleData = module.GetComponent<ModuleData>();
-		Plugin.LogDebug("Key: " + key);
-		Plugin.LogDebug("FileName: " + moduleData._FileName);
 
 		if (key.StartsWith("Module/")) moduleData._FileName = key;
 		else moduleData._FileName = "Module/" + key;
+		Plugin.LogDebug("Key: " + key);
 
 		BoxCollider moduleSelector = module.GetComponentInChildren<BoxCollider>();
 		if (!moduleSelector)
-			Plugin.Log.LogError($"Module {key} has no BoxCollider selector");
+			Plugin.Log.LogError($"Module {key} has no BoxCollider selector.");
 
-		string[] validMaterials = ["M_Main", "M_Sub", "M_Mecha", "M_Accent", "M_Light", "M_Belly", "M_Tube"];
-		if (Main.mechShader)
-			foreach (var mats in moduleData.AllRenderer)
+		string[] replacedShaders = ["M_Main", "M_Sub", "M_Mecha", "M_Accent", "M_Light", "M_Belly", "M_Tube", "M_Tentacle"];
+		string[] replacedMaterials = ["M_Glass", "M_Extra1", "M_Extra2", "M_Extra3"];
+
+		foreach (Renderer render in moduleData.AllRenderer)
+		{
+			Il2CppSystem.Collections.Generic.List<Material> mats = new(render.sharedMaterials.Count);
+
+			for (int i = 0; i < render.sharedMaterials.Count; i++)
 			{
-				foreach (var mat in mats.materials)
+				Material mat = render.sharedMaterials[i];
+				string matName = mat.name;
+
+				for (int j = 0; j < replacedMaterials.Length; j++)
 				{
-					foreach (var validMat in validMaterials)
+					if (matName.StartsWith(replacedMaterials[j]))
 					{
-						if (mat.name.Contains(validMat))
-						{
-							mat.shader = Main.mechShader;
-							mat.SetFloat("_MetallicPow", 0f);
-						}
+						// Plugin.LogInfo("Rep mat: " + mat.name);
+						mat = ModMachineBuildManager.mainMaterials[j];
+						mats.Add(mat);
+						break;
 					}
 				}
+
+				for (int j = 0; j < replacedShaders.Length; j++)
+				{
+					if (matName.StartsWith(replacedShaders[j]))
+					{
+						// Plugin.LogInfo("Rep sha: " + mat.name);
+						mat.shader = ModMachineBuildManager.mechShader;
+						mat.SetFloat("_MetallicPow", 0f);
+						mats.Add(mat);
+						break;
+					}
+				}
+
+				// Plugin.LogInfo("Final: " + mats[i].shader.name);
 			}
+			render.SetSharedMaterials(mats);
+		}
 
 		ReplaceAssets(module, moduleData);
 	}
@@ -95,7 +115,7 @@ public class ModModuleLoader : MonoBehaviour
 		{
 			if (thruster._Trail)
 			{
-				Plugin.LogDebug(ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name]);
+				// Plugin.LogDebug(ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name]);
 				try
 				{
 					thruster._Trail.visualEffectAsset = ModAssetHandler.vfxAssets[thruster._Trail.visualEffectAsset.name];
@@ -105,7 +125,7 @@ public class ModModuleLoader : MonoBehaviour
 
 			foreach (VisualEffect vfx in thruster._VFXs)
 			{
-				Plugin.LogDebug(ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name]);
+				// Plugin.LogDebug(ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name]);
 				try
 				{
 					vfx.visualEffectAsset = ModAssetHandler.vfxAssets[vfx.visualEffectAsset.name];

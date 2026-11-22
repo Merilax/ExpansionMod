@@ -28,7 +28,6 @@ public class ModBundleParser
 	}
 
 	public static List<ModDefinition> pendingLoadModDefs = [];
-	// public static List<ModDefinition> loadedModDefs = [];
 	public static List<ModDefinition> loadedModDefs = [];
 	public static List<BundleRecord> loadedModRecords = [];
 	public static List<string> registeredPrefixes = [];

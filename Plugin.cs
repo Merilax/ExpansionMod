@@ -1,4 +1,6 @@
-﻿using ArchEmperorLib;
+﻿using System.IO;
+using System.Text.Json;
+using ArchEmperorLib;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -19,20 +21,38 @@ public class Plugin : BasePlugin
 
 	public static ConfigEntry<bool> logVerbose;
 	public static string BUNDLE_ROOT;
+	public static string CUSTOM_MACHINE_PATH;
+	public static JsonSerializerOptions jsonSerializerOptions;
 	public static UniverseLib.AssetBundle assets;
 	public override void Load()
 	{
 		Log = BepInEx.Logging.Logger.CreateLogSource("ExpansionMod");
 
-		BUNDLE_ROOT = System.IO.Path.Combine(Paths.PluginPath, "ArchExpansionMod");
+		BUNDLE_ROOT = Path.Combine(Paths.PluginPath, "ArchExpansionMod");
+		CUSTOM_MACHINE_PATH = Path.Combine(Application.persistentDataPath, "ArchExpansionData", "Machine");
 
-		string assetBundlePath = System.IO.Path.Combine(Paths.PluginPath, "ArchExpansionMod", "archexpansion_assets");
-		assets = UniverseLib.AssetBundle.LoadFromFile(assetBundlePath);
+		string assetBundlePath = Path.Combine(Paths.PluginPath, "ArchExpansionMod", "archexpansion_assets");
+		try
+		{
+			assets = UniverseLib.AssetBundle.LoadFromFile(assetBundlePath);
+		}
+		catch (System.Exception ex)
+		{
+			Log.LogError("Failed to load essential mod assets! Aborting loading.");
+			Log.LogError(ex);
+			return;
+		}
 
 		logVerbose = Config.Bind("Debug", "logVerbose", false, "Log additional events for debugging purposes.");
 
 		var harmony = Harmony.CreateAndPatchAll(typeof(Main));
 		harmony.PatchAll(typeof(MainMenuPatch));
+		harmony.PatchAll(typeof(ModMachineBuildManager));
+		harmony.PatchAll(typeof(MachineDesignerUIPatch));
+
+		jsonSerializerOptions = new JsonSerializerOptions() { WriteIndented = true, IncludeFields = true };
+		jsonSerializerOptions.Converters.Add(new ColorConverter());
+		jsonSerializerOptions.Converters.Add(new MaterialDataConverter());
 
 		IL2CPPChainloader.AddUnityComponent<ModModuleLoader>();
 
@@ -49,15 +69,6 @@ public class Plugin : BasePlugin
 public class Main
 {
 	public static bool init = false;
-	public static Shader mechShader;
-
-	private static void OnLogMessage(string condition, string stackTrace, LogType type)
-	{
-		if (type == LogType.Error || type == LogType.Exception)
-		{
-			Plugin.Log.LogError(condition + "\n" + stackTrace);
-		}
-	}
 
 	// INIT
 	[HarmonyPrefix]
@@ -82,13 +93,6 @@ public class Main
 		__result = new(true); // Dumb but works
 	}
 
-	[HarmonyPostfix]
-	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.Start))]
-	public static void MachineDesignerMainStart(MachineDesignerMain __instance)
-	{
-		mechShader = __instance._BM.MyMainMats[0].shader;
-	}
-
 	[HarmonyPrefix]
 	[HarmonyPatch(typeof(MachineDesignerMain._ModuleLoader_d__86), nameof(MachineDesignerMain._ModuleLoader_d__86.MoveNext))]
 	public static void ModuleLoader(MachineDesignerMain._ModuleLoader_d__86 __instance, ref bool __runOriginal, ref bool __result)
@@ -98,7 +102,6 @@ public class Main
 		{
 			if (__instance.__1__state == 1 && __instance._handle_5__2.IsValid() && __instance._handle_5__2.Status == UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationStatus.Succeeded)
 			{
-				Plugin.LogDebug("HIT");
 				GameObject module = __instance._handle_5__2.Result;
 				ModModuleLoader.SetupModule(module, __instance.path);
 			}
@@ -109,7 +112,6 @@ public class Main
 	[HarmonyPatch(typeof(DataManager), nameof(DataManager.GetUnlockStatus))]
 	public static void GetUnlockStatus(ref string key, ref bool __runOriginal, ref DataManager.UnlockStatus __result)
 	{
-		Plugin.LogDebug("GetUnlockStatus: " + key);
 		if (ModBundleParser.IsValidPrefix(key))
 		{
 			__runOriginal = false;
@@ -119,7 +121,7 @@ public class Main
 
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(Pooler), nameof(Pooler.InstantiateModuleSync))]
-	public static void InstantiateModuleSync(ref string name, ref bool __runOriginal, ref GameObject __result)
+	public static void InstantiateModuleSync(ref string name, ref GameObject __result)
 	{
 		Plugin.LogDebug("InstantiateModuleSync: " + name);
 		if (ModBundleParser.IsValidPrefix(name))
@@ -128,18 +130,18 @@ public class Main
 		}
 	}
 
-	[HarmonyPrefix]
-	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Install_ShowModuleInfo))]
-	public static void Install_ShowModuleInfo(MachineDesignerUI __instance, int sumbNum, int dataNum)
+	// [HarmonyPrefix]
+	// [HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Install_ShowModuleInfo))]
+	public static void Install_ShowModuleInfo(int sumbNum, int dataNum)
 	{
 		Plugin.LogDebug($"Install_ShowModuleInfo: {sumbNum} / {dataNum}");
 	}
 	// [HarmonyPrefix]
 	// [HarmonyPatch(typeof(MyUtility), nameof(MyUtility.GetModuleInfo))]
-	// public static void GetModuleInfo(MyUtility __instance, ref ModuleDataDef data, ref bool IsSmall)
-	// {
-	// 	Plugin.LogDebug($"GetModuleInfo: {data._Name} / {IsSmall}");
-	// }
+	public static void GetModuleInfo(ref ModuleDataDef data, ref bool IsSmall)
+	{
+		Plugin.LogDebug($"GetModuleInfo: {data._Name} / {IsSmall}");
+	}
 
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Start))]
@@ -153,17 +155,32 @@ public class Main
 		}
 		catch (System.Exception) { }
 	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(ModuleAnimator), nameof(ModuleAnimator.UpdateFloatingJoint))]
+	public static void ModuleAnimator_UpdateFloatingJoint(ModuleAnimator __instance, ref bool __runOriginal)
+	{
+		if (__instance._Type == ModuleAnimator.AnimType.FloatJoint)
+		{
+			ModuleData moduleData = __instance.transform.GetComponent<ModuleData>();
+			if (moduleData != null && moduleData._FileName != "Module/Joint_24")
+			{
+				__runOriginal = false;
+				__instance.FJ_part?.localPosition = __instance.FJ_currentPos;
+				__instance.FJ_vfx?.gameObject?.active = !(__instance.CurrentVal <= 10 && __instance.CurrentVal != 10);
+			}
+		}
+	}
 }
 
 public class MainMenuPatch
 {
-	static bool once = false;
+	private static bool once = false;
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(Scene_MainMenu), nameof(Scene_MainMenu.Start))]
 	public static void InitializeMain(ref Scene_MainMenu __instance)
 	{
 		if (once) return; once = true;
-		Cursor.lockState = CursorLockMode.Confined;
 		ModManager.SetCredits(MyPluginInfo.PLUGIN_GUID, MakeCredits());
 	}
 	private static CreditBlock MakeCredits()

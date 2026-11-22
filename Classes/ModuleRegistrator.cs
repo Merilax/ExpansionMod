@@ -21,7 +21,7 @@ public static class ModuleRegistrator
 		[], // Orna
 	];
 
-	public static List<string> translationAssetKeys = [];
+	// public static List<string> translationAssetKeys = [];
 
 	public static void PopulateModuleList()
 	{
@@ -67,12 +67,12 @@ public static class ModuleRegistrator
 
 		foreach (var modDef in ModBundleParser.loadedModDefs)
 		{
-			Plugin.LogDebug("Registering translations for bundle " + modDef.bundleName);
+			Plugin.LogDebug($"Translating bundle: {modDef.bundleName}");
 			foreach (var table in modDef.translationTables)
 			{
 				if (!table.ID.StartsWith("mod_"))
 					table.ID = "mod_" + table.ID;
-				Plugin.LogDebug("Injecting translation ID: " + table.ID);
+				Plugin.LogDebug($"- ID: {table.ID}");
 				tableChineseSimplified.AddEntry(table.ID, table.SimplifiedChinese);
 				tableChineseTraditional.AddEntry(table.ID, table.TraditionalChinese);
 				tableEnglish.AddEntry(table.ID, table.English);

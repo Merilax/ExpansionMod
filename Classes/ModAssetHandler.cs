@@ -14,7 +14,7 @@ namespace ArchExpansionMod;
 
 public class ModAssetHandler
 {
-	static readonly string[] categories = { "Armors", "Coolers", "Generators", "Radars", "Thrusters", "Physics", "Specials", "Weapons", "Joints", "Ornaments" };
+	static readonly string[] categories = ["Armors", "Coolers", "Generators", "Radars", "Thrusters", "Physics", "Specials", "Weapons", "Joints", "Ornaments"];
 	public static Dictionary<string, VisualEffectAsset> vfxAssets = new()
 	{
 		{"BoostEffects_Trail", null},
@@ -29,6 +29,13 @@ public class ModAssetHandler
 		{"BA3SE09_Charging_in_2", null},
 	};
 
+	public struct ModuleDefinition(string moduleName, string bundleName)
+	{
+		public readonly string moduleName = moduleName;
+		public readonly string bundleName = bundleName;
+	}
+	public static List<ModuleDefinition> moduleDefLists = [];
+
 	public static void PrepareAssets()
 	{
 		foreach (var modDef in ModBundleParser.pendingLoadModDefs)
@@ -38,12 +45,12 @@ public class ModAssetHandler
 			var map = new ResourceLocationMap($"{modDef.bundleName}ContentCatalog", modDef.moduleCount);
 
 			var bundleLoc = new ResourceLocationBase(
-				"bundleName",
+				modDef.bundleName,
 				Path.Combine(Plugin.BUNDLE_ROOT, modDef.bundleName, modDef.bundleName),
 				typeof(AssetBundleProvider).FullName,
 				Il2CppType.From(typeof(IAssetBundleResource)));
 
-			map.Add("bundleName", bundleLoc.Cast<IResourceLocation>());
+			map.Add(modDef.bundleName, bundleLoc.Cast<IResourceLocation>());
 
 			// var provider = new ModuleTranslationResourceProvider();
 			// var providers = Addressables.ResourceManager.ResourceProviders;
@@ -53,6 +60,7 @@ public class ModAssetHandler
 
 			int loadedModules = 0;
 
+			Plugin.LogInfo($"Registering module definitions...");
 			for (int i = 0; i < 10; i++)
 			{
 				List<string> category;
@@ -75,10 +83,11 @@ public class ModAssetHandler
 					string moduleRoot = $"Assets/{modDef.bundleName}/Modules/{categories[i]}/";
 					try
 					{
-						Plugin.LogDebug($"Registering module definition {itemName}...");
+						Plugin.LogDebug($"- {itemName}");
 						if (itemName.Length <= 0) continue;
 
 						ModuleList moduleList = new() { _MdName = $"{modDef.bundleName}_{itemName}_DataDef", _name = $"{modDef.bundleName}_{itemName}" };
+						moduleDefLists.Add(new(moduleList._name, modDef.bundleName));
 
 						RegisterAsset<GameObject>($"Module/{moduleList._name}", $"{moduleRoot}{itemName}/Module.prefab", typeof(BundledAssetProvider), map, deps);
 						RegisterAsset<Sprite>($"Sumb_{moduleList._name}", $"{moduleRoot}{itemName}/Thumb.png", typeof(BundledAssetProvider), map, deps);
@@ -120,7 +129,7 @@ public class ModAssetHandler
 
 	public static void AcquireVanillaAssets()
 	{
-		Plugin.LogInfo("Acquiring vanilla assets. This should only take a few seconds.");
+		Plugin.LogInfo("Extracting vanilla assets. This should only take a few seconds...");
 		// Note: cloning the marker objects through Instantiate() gets them destroyed afterwards.
 
 		GameObject module;
@@ -146,6 +155,13 @@ public class ModAssetHandler
 		audioClips["BA3SE09_Charging_in_2"] = module.GetComponent<UsingController>()._chargingSE.clip;
 		ModModuleLoader.markers["Connector"] = module.GetComponent<ModuleData>().ConnectorsCT[0]._Marker;
 
-		Plugin.LogInfo("Acquired vanilla assets.");
+		// Floating joint / Black hole bolt
+		module = Addressables.LoadAssetAsync<GameObject>("Module/Joint_24").WaitForCompletion();
+		vfxAssets["Lightning"] = module.GetComponent<ModuleAnimator>().FJ_vfx.visualEffectAsset;
+
+		Material material = Addressables.LoadAssetAsync<Material>("Mat/Main").WaitForCompletion();
+		ModMachineBuildManager.SetMechShader(material.shader);
+
+		Plugin.LogInfo("Done.");
 	}
 }
