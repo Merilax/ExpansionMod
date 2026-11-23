@@ -52,7 +52,6 @@ public class ModModuleLoader : MonoBehaviour
 				{
 					if (matName.StartsWith(replacedMaterials[j]))
 					{
-						// Plugin.LogInfo("Rep mat: " + mat.name);
 						mat = ModMachineBuildManager.mainMaterials[j];
 						mats.Add(mat);
 						break;
@@ -63,15 +62,12 @@ public class ModModuleLoader : MonoBehaviour
 				{
 					if (matName.StartsWith(replacedShaders[j]))
 					{
-						// Plugin.LogInfo("Rep sha: " + mat.name);
 						mat.shader = ModMachineBuildManager.mechShader;
 						mat.SetFloat("_MetallicPow", 0f);
 						mats.Add(mat);
 						break;
 					}
 				}
-
-				// Plugin.LogInfo("Final: " + mats[i].shader.name);
 			}
 			render.SetSharedMaterials(mats);
 		}

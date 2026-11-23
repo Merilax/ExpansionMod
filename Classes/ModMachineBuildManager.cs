@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HarmonyLib;
+using TMPro;
 using UnityEngine;
 using UnityEngine.VFX;
 using UniverseLib;
@@ -24,17 +25,16 @@ public class ModMachineBuildManager
 	}
 	public struct CustomMachineData()
 	{
-		// public Palette mainPalette = new(), subPalette = new();
+		public int version = 1;
 		public List<MaterialData> mainMatData = [new(), new(), new(), new()];
 		public List<MaterialData> subMatData = [new(), new(), new(), new()];
 	}
-
-	public static UsedBundles usedBundles = new();
 
 	public static Shader mechShader;
 	public static Material[] mainMaterials = [null, null, null, null];
 	public static Material[] subMaterials = [null, null, null, null];
 
+	private static List<MaterialData> copiedMatData = null;
 	private static CustomMachineData customMachineData = new();
 	private static int currentEditMaterialIndex = -1;
 
@@ -72,21 +72,47 @@ public class ModMachineBuildManager
 		setShaderOnce = false;
 	}
 
-	public static bool ParseModule(string key)
+	private static void UpdateCustomMachineData(CustomMachineData data, BuildMachine build = null)
 	{
-		try
-		{
-			var modDef = ModAssetHandler.moduleDefLists.First(e => e.moduleName == key);
-			if (!usedBundles.moduleCounts.ContainsKey(modDef.bundleName))
-				usedBundles.moduleCounts.Add(modDef.bundleName, 0);
+		if (data.version < 1) data.version = 1; // Test upgrader
+		customMachineData = data;
+	}
 
-			usedBundles.moduleCounts[modDef.bundleName] += 1;
-			return true;
-		}
-		catch (Exception)
+	private static void ReassignMaterials(Renderer Ren, bool IsSub, Il2CppSystem.Collections.Generic.List<Material> premadeArray = null)
+	{
+		Material[] customMats = IsSub ? subMaterials : mainMaterials;
+		Il2CppSystem.Collections.Generic.List<Material> newMats = new(Ren.sharedMaterials.Count);
+		Plugin.LogInfo(IsSub);
+
+		for (int i = 0; i < Ren.sharedMaterials.Count; i++)
 		{
-			return false;
+			Material mat = Ren.sharedMaterials[i];
+			if (mat.name.Contains("Error") && premadeArray != null)
+			{
+				mat = premadeArray[i];
+			}
+			else
+				for (int j = 0; j < customMats.Length; j++)
+				{
+					if (mat.name.Contains(customMats[j].name[2..]))
+					{
+						mat = customMats[j]; break;
+					}
+				}
+			newMats.Add(mat);
 		}
+
+		Ren.SetSharedMaterials(newMats);
+	}
+
+	private static void CopyMatData(MaterialData source, MaterialData target)
+	{
+		target._color = source._color;
+		target._metallic = source._metallic;
+		target._pearl = source._pearl;
+		target._mat = source._mat;
+		target._dirt = source._dirt;
+		target._rust = source._rust;
 	}
 
 	[HarmonyPrefix]
@@ -132,15 +158,6 @@ public class ModMachineBuildManager
 		File.WriteAllText(Path.Combine(Plugin.CUSTOM_MACHINE_PATH, $"Arc{slotNum}", $"Arc{slotNum}.json"), json);
 	}
 
-	private static void UpdateCustomMachineData(CustomMachineData data, BuildMachine build = null)
-	{
-		customMachineData = data;
-		// mainMaterials[0].color = data.mainMatData[0]._color;
-		// mainMaterials[1].color = data.mainMatData[1]._color;
-		// mainMaterials[2].color = data.mainMatData[2]._color;
-		// mainMaterials[3].color = data.mainMatData[3]._color;	
-	}
-
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Paint_OpenMatSettings))]
 	public static void MachineDesignerUI_OpenMatSettings(MachineDesignerUI __instance, int MatNum, ref bool __runOriginal)
@@ -149,9 +166,12 @@ public class ModMachineBuildManager
 		{
 			__runOriginal = false;
 			__instance.Paint_MatSetting_Sectors[1].active = true; // Metallic
-			__instance.Paint_MatSetting_Sectors[2].active = MatNum != 7; // Pearl
+			__instance.Paint_MatSetting_Sectors[2].active = true; // Pearl (for glass, smoothness)
+			__instance.Paint_MatSetting_Sectors[2].transform.GetChild(0).GetComponent<TextMeshProUGUI>().text = "SMOOTHNESS";
 			__instance.Paint_MatSetting_Sectors[3].active = MatNum != 7; // Matte
 		}
+		else
+			__instance.Paint_MatSetting_Sectors[2].transform.GetChild(0).GetComponent<TextMeshProUGUI>().text = "MATTE";
 	}
 
 	[HarmonyPrefix]
@@ -169,11 +189,28 @@ public class ModMachineBuildManager
 		}
 	}
 
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.Paint_Copy))]
+	private static void MachineDesignerMain_PaintCopy(MachineDesignerMain __instance)
+	{
+		copiedMatData = __instance.CurrentPaletteIsMain ? customMachineData.mainMatData : customMachineData.subMatData;
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(MachineDesignerMain), nameof(MachineDesignerMain.Paint_Paste))]
+	private static void MachineDesignerMain_PaintPaste(MachineDesignerMain __instance)
+	{
+		if (copiedMatData == null) return;
+		if (__instance.CurrentPaletteIsMain)
+			customMachineData.mainMatData = copiedMatData;
+		else
+			customMachineData.subMatData = copiedMatData;
+	}
+
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(BuildMachine), nameof(BuildMachine.RefreshMats))]
 	private static void BuildMachine_RefreshMats(BuildMachine __instance, bool IsMain, ref bool __runOriginal)
 	{
-
 		List<MaterialData> materialDatas = IsMain ? customMachineData.mainMatData : customMachineData.subMatData;
 		Material[] materials = IsMain ? mainMaterials : subMaterials;
 		for (int i = 0; i < 4; i++)
@@ -182,6 +219,12 @@ public class ModMachineBuildManager
 		}
 	}
 
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Paint_RefreshMaterialData))]
+	private static void MachineDesignerUI_Paint_RefreshMaterialData2(MachineDesignerUI __instance, MaterialData md)
+	{
+		if (md == null) Plugin.Log.LogWarning("This is a vanilla bug, do not report.");
+	}
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(MachineDesignerUI), nameof(MachineDesignerUI.Paint_RefreshMaterialData))]
 	private static void MachineDesignerUI_Paint_RefreshMaterialData(MachineDesignerUI __instance, MaterialData md)
@@ -201,6 +244,7 @@ public class ModMachineBuildManager
 			__runOriginal = false;
 			m.SetVector("_BaseColor", md._color);
 			m.SetFloat("_Metallic", md._metallic);
+			m.SetFloat("_Smoothness", md._pearl);
 		}
 	}
 
@@ -211,49 +255,62 @@ public class ModMachineBuildManager
 		if (Ren.GetActualType() == typeof(VFXRenderer)) return;
 		ReassignMaterials(Ren, IsSub);
 	}
+
+	[HarmonyPostfix]
+	[HarmonyPatch(typeof(BuildMachine), nameof(BuildMachine.Preview_InitMaterial))]
+	private static void Preview_InitMaterial(BuildMachine __instance, Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<ColorPalette> cp)
+	{
+		List<MaterialData> materialDatas = customMachineData.mainMatData;
+		Material[] materials = mainMaterials;
+		for (int i = 0; i < 4; i++)
+			__instance.RefreshCompositeMechShader(materials[i], materialDatas[i], materialDatas[i]._color);
+		materialDatas = customMachineData.subMatData;
+		materials = subMaterials;
+		for (int i = 0; i < 4; i++)
+			__instance.RefreshCompositeMechShader(materials[i], materialDatas[i], materialDatas[i]._color);
+	}
+
+	private static Dictionary<int, Il2CppSystem.Collections.Generic.List<Material>> recoveredRendererMaterials = [];
+	[HarmonyPrefix]
+	[HarmonyPatch(typeof(BuildMachine), nameof(BuildMachine.Preview_SetMaterial))] // WARN: IsSecret is not accounted for.
+	private static void Preview_SetMaterial_Pre(Transform root, ref bool __runOriginal)
+	{
+		recoveredRendererMaterials.Clear();
+
+		var renders = root.GetComponentsInChildren<Renderer>();
+		foreach (var render in renders)
+		{
+			if (render.GetActualType() == typeof(VFXRenderer)) continue;
+
+			bool IsSub = MyUtility.GetModuleDataInParent(render.transform)._SubPalette;
+			Material[] customMats = IsSub ? subMaterials : mainMaterials;
+
+			Il2CppSystem.Collections.Generic.List<Material> mats = new(render.materials.Length);
+			foreach (var mat in render.materials)
+			{
+				for (int j = 0; j < customMats.Length; j++)
+				{
+					if (mat.name.Contains(customMats[j].name[2..]))
+						mats.Add(customMats[j]);
+				}
+			}
+			recoveredRendererMaterials.Add(render.GetInstanceID(), mats);
+		}
+
+	}
 	[HarmonyPostfix]
 	[HarmonyPatch(typeof(BuildMachine), nameof(BuildMachine.Preview_SetMaterial))]
-	private static void LoadMaterialForDiorama(Transform root)
+	private static void Preview_SetMaterial(Transform root)
 	{
 		var renders = root.GetComponentsInChildren<Renderer>();
 		foreach (var render in renders)
 		{
 			if (render.GetActualType() == typeof(VFXRenderer)) continue;
 			bool IsSub = MyUtility.GetModuleDataInParent(render.transform)._SubPalette;
-			ReassignMaterials(render, IsSub);
+			recoveredRendererMaterials.TryGetValue(render.GetInstanceID(), out var premadeArray);
+			ReassignMaterials(render, IsSub, premadeArray);
 		}
-	}
-	private static void ReassignMaterials(Renderer Ren, bool IsSub)
-	{
-		Material[] myMats = IsSub ? subMaterials : mainMaterials;
-		Il2CppSystem.Collections.Generic.List<Material> newMats = new(myMats.Length);
-		for (int i = 0; i < Ren.materials.Count; i++)
-		{
-			bool skip = false;
-			Material mat = Ren.materials[i];
-			for (int j = 0; j < myMats.Length; j++)
-			{
-				if (mat.name.Contains(myMats[j].name[2..]))
-				{
-					newMats.Add(myMats[j]);
-					skip = true;
-					break;
-				}
-			}
-			if (skip) continue;
-			newMats.Add(mat);
-		}
-		Ren.SetSharedMaterials(newMats);
-	}
-
-	private static void CopyMatData(MaterialData source, MaterialData target)
-	{
-		target._color = source._color;
-		target._metallic = source._metallic;
-		target._pearl = source._pearl;
-		target._mat = source._mat;
-		target._dirt = source._dirt;
-		target._rust = source._rust;
+		recoveredRendererMaterials.Clear();
 	}
 }
 
